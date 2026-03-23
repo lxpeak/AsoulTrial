@@ -21,7 +21,7 @@ const CHARS = {
   bella:  { name: '贝拉', imgKey: 'bella',  bannerKey: 'b_bella',
             desc: '体型速度UP·星星引力', atk: 1, speed: 3, hp: 3 },
   eileen: { name: '乃琳', imgKey: 'eileen', bannerKey: 'b_eileen',
-            desc: '激光穿透·冰淇淋冻结', atk: 1, speed: 3, hp: 3 },
+            desc: '激光穿透·冻结', atk: 1, speed: 3, hp: 3 },
 };
 const CHAR_KEYS = ['jiaran', 'bella', 'eileen'];
 
