@@ -21,10 +21,15 @@ function rrect(x, y, w, h, r, fill, stroke, lw=1) {
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
 }
 function bg() {
-  ctx.fillStyle = '#2d5a27'; ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 1;
-  for (let x=0; x<W; x+=40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-  for (let y=0; y<H; y+=40) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  const bgi = IMGS['background'];
+  if (bgi && bgi.complete && bgi.naturalWidth) {
+    ctx.drawImage(bgi, 0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#2d5a27'; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 1;
+    for (let x=0; x<W; x+=40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+    for (let y=0; y<H; y+=40) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  }
 }
 
 // ==================== DRAW GAME ====================
@@ -135,16 +140,35 @@ function drawGame() {
 
   // Skill banner overlay
   if (p.bannerTimer > 0) {
+    // bannerTimer counts down from 180 (3s):
+    //   elapsed 0–30f  (0.0–0.5s) → slide in from left
+    //   elapsed 30–120f (0.5–2.0s) → hold center
+    //   elapsed 120–180f(2.0–3.0s) → slide out to right
+    const elapsed = 180 - p.bannerTimer;
+    const bw2 = 520;
+    let bannerX;
+    if (elapsed < 30) {
+      const t = elapsed / 30;
+      const eased = 1 - (1 - t) * (1 - t); // ease-out
+      bannerX = -(bw2 / 2) + eased * (W / 2 + bw2 / 2);
+    } else if (elapsed < 120) {
+      bannerX = W / 2;
+    } else {
+      const t = (elapsed - 120) / 60;
+      const eased = t * t; // ease-in
+      bannerX = W / 2 + eased * (W / 2 + bw2 / 2);
+    }
+
     ctx.save();
-    ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(0, 0, W, H);
     const bannerKey = CHARS[gs.charKey].bannerKey;
     const bi = IMGS[bannerKey];
     if (bi.complete && bi.naturalWidth) {
-      const bw2=520, bh2=bi.naturalHeight*(520/bi.naturalWidth)||200;
-      imgAt(bannerKey, W/2, H/2, bw2, Math.min(bh2,260), 0.75);
+      const bh2 = bi.naturalHeight * (bw2 / bi.naturalWidth) || 200;
+      imgAt(bannerKey, bannerX, H / 2, bw2, Math.min(bh2, 260), 0.9);
     } else {
-      txt(CHARS[gs.charKey].name + ' 技能！', W/2, H/2,
-          { size:60, color:'#ffd700', bold:true, shadow:true });
+      txt(CHARS[gs.charKey].name + ' 技能！', bannerX, H / 2,
+          { size: 60, color: '#ffd700', bold: true, shadow: true });
     }
     ctx.restore();
   }
@@ -187,10 +211,20 @@ function drawTitle() {
     ctx.arc((i*137.5)%W, (i*73.1+Date.now()*0.01)%H, 1.2, 0, Math.PI*2);
     ctx.fill();
   }
-  txt('一个魂的试炼', W/2, H/2-80, { size:52, color:'#ffd700', bold:true, shadow:true });
-  txt('The Trial of A-Soul ', W/2, H/2-24, { size:18, color:'#888' });
-  if (Math.floor(Date.now()/500)%2===0)
-    txt('按空格 / 点击 开始', W/2, H/2+42, { size:20, color:'#ccc', shadow:true });
+  txt('一个魂的试炼', W/2, H/2-90, { size:52, color:'#ffd700', bold:true, shadow:true });
+  txt('The Trial of A-Soul ', W/2, H/2-34, { size:18, color:'#888' });
+
+  const menuItems = ['开始游戏', '设置'];
+  menuItems.forEach((label, idx) => {
+    const by = H/2 + 30 + idx * 56;
+    const sel = idx === titleMenuIdx;
+    rrect(W/2-110, by-22, 220, 44, 10,
+          sel ? 'rgba(255,215,0,0.25)' : 'rgba(255,255,255,0.06)',
+          sel ? '#ffd700' : '#444', sel?2:1);
+    txt(label, W/2, by, { size:20, color: sel?'#ffd700':'#ccc', bold:sel });
+    if (sel) { txt('►', W/2-95, by, { size:14, color:'#ffd700' }); }
+  });
+
   txt('WASD 移动   方向键 射击   空格 技能', W/2, H-28, { size:13, color:'#555' });
 }
 
@@ -262,4 +296,79 @@ function drawGameOver() {
   });
 
   txt('↑↓ / WS 选择   空格 / 点击 确认', W/2, H-28, { size:13, color:'#444' });
+}
+
+// ==================== DRAW PAUSE ====================
+function drawPause() {
+  ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(0,0,W,H);
+  txt('游戏暂停', W/2, H/2-100, { size:42, color:'#ffd700', bold:true, shadow:true });
+
+  const menuItems = ['继续游戏', '返回主菜单', '设置'];
+  menuItems.forEach((label, idx) => {
+    const by = H/2 - 20 + idx * 54;
+    const sel = idx === pauseMenuIdx;
+    rrect(W/2-115, by-22, 230, 44, 10,
+          sel ? 'rgba(255,215,0,0.25)' : 'rgba(255,255,255,0.07)',
+          sel ? '#ffd700' : '#555', sel?2:1);
+    txt(label, W/2, by, { size:19, color: sel?'#ffd700':'#bbb', bold:sel });
+    if (sel) { txt('►', W/2-98, by, { size:13, color:'#ffd700' }); }
+  });
+
+  txt('ESC 继续游戏', W/2, H-28, { size:13, color:'#444' });
+}
+
+// ==================== DRAW SETTINGS ====================
+function drawSettings() {
+  ctx.fillStyle='#1a1a2e'; ctx.fillRect(0,0,W,H);
+  txt('设置 / Settings', W/2, 68, { size:34, color:'#ffd700', bold:true, shadow:true });
+
+  const volPct = Math.round(SETTINGS.volume * 100);
+  const rows = [
+    { label:'音量', value: `${volPct}%` },
+    { label:'音效', value: SETTINGS.sfx ? '开启' : '关闭' },
+    { label:'语言', value: '简体中文 / Simplified Chinese' },
+  ];
+
+  rows.forEach((row, idx) => {
+    const ry = 190 + idx * 72;
+    const sel = idx === settingsMenuIdx;
+
+    rrect(W/2-240, ry-28, 480, 56, 10,
+          sel ? 'rgba(255,215,0,0.12)' : 'rgba(255,255,255,0.04)',
+          sel ? '#ffd700' : '#333', sel?2:1);
+
+    txt(row.label, W/2-160, ry, { size:18, color: sel?'#ffd700':'#aaa', align:'left', bold:sel });
+
+    if (idx === 0) {
+      // Volume bar
+      const bx = W/2-20, barW = 140, barH = 12, by = ry - barH/2;
+      ctx.fillStyle='#333'; ctx.fillRect(bx, by, barW, barH);
+      ctx.fillStyle='#ffd700'; ctx.fillRect(bx, by, barW*(SETTINGS.volume), barH);
+      ctx.strokeStyle='#555'; ctx.lineWidth=1; ctx.strokeRect(bx, by, barW, barH);
+      if (sel) {
+        txt('◄', bx-18, ry, { size:14, color:'#ffd700', align:'center' });
+        txt('►', bx+barW+10, ry, { size:14, color:'#ffd700', align:'left' });
+      }
+      txt(row.value, bx+barW+26, ry, { size:14, color:'#ccc', align:'left' });
+    } else if (idx === 1) {
+      const sfxCol = SETTINGS.sfx ? '#2ecc71' : '#e74c3c';
+      rrect(W/2+40, ry-16, 90, 32, 8,
+            SETTINGS.sfx ? 'rgba(46,204,113,0.25)' : 'rgba(231,76,60,0.25)',
+            sfxCol, 1.5);
+      txt(row.value, W/2+85, ry, { size:15, color:sfxCol });
+    } else {
+      txt(row.value, W/2+20, ry, { size:14, color:'#aaa', align:'left' });
+    }
+  });
+
+  // Back button
+  const backY = 190 + 3 * 72;
+  const backSel = settingsMenuIdx === 3;
+  rrect(W/2-110, backY-22, 220, 44, 10,
+        backSel ? 'rgba(255,215,0,0.2)' : 'rgba(255,255,255,0.06)',
+        backSel ? '#ffd700' : '#444', backSel?2:1);
+  txt('返回', W/2, backY, { size:18, color:backSel?'#ffd700':'#ccc', bold:backSel });
+  if (backSel) { txt('►', W/2-95, backY, { size:13, color:'#ffd700' }); }
+
+  txt('↑↓ 选择   ← → 调整   ESC 返回', W/2, H-28, { size:13, color:'#444' });
 }

@@ -1,8 +1,12 @@
 'use strict';
 
 // ==================== STATE ====================
-let screen = 'title';       // 'title' | 'charSelect' | 'game' | 'gameOver'
+let screen = 'title';       // 'title' | 'charSelect' | 'game' | 'paused' | 'settings' | 'gameOver'
+let titleMenuIdx = 0;
 let charSelectIdx = 0;
+let pauseMenuIdx = 0;
+let settingsMenuIdx = 0;
+let settingsFrom = 'title'; // 'title' | 'paused'
 let gameOverMenuIdx = 0;
 let gs = null;
 
@@ -32,7 +36,7 @@ function initGS(charKey) {
 // ==================== INPUT ====================
 const keys = {};
 document.addEventListener('keydown', e => {
-  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','Escape'].includes(e.key)) e.preventDefault();
   if (!keys[e.code]) onKeyPress(e.code);
   keys[e.code] = true;
 });
@@ -47,13 +51,40 @@ canvas.addEventListener('click', e => {
 
 function onKeyPress(code) {
   if (screen === 'title') {
-    if (code === 'Space' || code === 'Enter') { screen = 'charSelect'; SFX.confirm(); }
+    if (code === 'ArrowUp'   || code === 'KeyW') { titleMenuIdx = (titleMenuIdx + 1) % 2; SFX.select(); }
+    if (code === 'ArrowDown' || code === 'KeyS') { titleMenuIdx = (titleMenuIdx + 1) % 2; SFX.select(); }
+    if (code === 'Space' || code === 'Enter') {
+      SFX.confirm();
+      if (titleMenuIdx === 0) screen = 'charSelect';
+      else { settingsFrom = 'title'; settingsMenuIdx = 0; screen = 'settings'; }
+    }
   } else if (screen === 'charSelect') {
     if (code === 'ArrowLeft'  || code === 'KeyA') { charSelectIdx = (charSelectIdx + 2) % 3; SFX.select(); }
     if (code === 'ArrowRight' || code === 'KeyD') { charSelectIdx = (charSelectIdx + 1) % 3; SFX.select(); }
     if (code === 'Space' || code === 'Enter') { startGame(CHAR_KEYS[charSelectIdx]); SFX.confirm(); }
+    if (code === 'Escape') { screen = 'title'; SFX.select(); }
   } else if (screen === 'game') {
     if (code === 'Space') activateSkill();
+    if (code === 'Escape') { screen = 'paused'; pauseMenuIdx = 0; SFX.select(); }
+  } else if (screen === 'paused') {
+    if (code === 'ArrowUp'   || code === 'KeyW') { pauseMenuIdx = (pauseMenuIdx + 2) % 3; SFX.select(); }
+    if (code === 'ArrowDown' || code === 'KeyS') { pauseMenuIdx = (pauseMenuIdx + 1) % 3; SFX.select(); }
+    if (code === 'Space' || code === 'Enter') confirmPause();
+    if (code === 'Escape') { screen = 'game'; SFX.select(); }
+  } else if (screen === 'settings') {
+    if (code === 'ArrowUp'   || code === 'KeyW') { settingsMenuIdx = (settingsMenuIdx + 3) % 4; SFX.select(); }
+    if (code === 'ArrowDown' || code === 'KeyS') { settingsMenuIdx = (settingsMenuIdx + 1) % 4; SFX.select(); }
+    if (code === 'ArrowLeft') {
+      if (settingsMenuIdx === 0) SETTINGS.volume = Math.max(0, SETTINGS.volume - 0.05);
+    }
+    if (code === 'ArrowRight') {
+      if (settingsMenuIdx === 0) SETTINGS.volume = Math.min(1, SETTINGS.volume + 0.05);
+    }
+    if (code === 'Space' || code === 'Enter') {
+      if (settingsMenuIdx === 1) { SETTINGS.sfx = !SETTINGS.sfx; SFX.select(); }
+      else if (settingsMenuIdx === 3) closeSettings();
+    }
+    if (code === 'Escape') closeSettings();
   } else if (screen === 'gameOver') {
     if (code === 'ArrowUp'   || code === 'KeyW') { gameOverMenuIdx = 0; SFX.select(); }
     if (code === 'ArrowDown' || code === 'KeyS') { gameOverMenuIdx = 1; SFX.select(); }
@@ -62,7 +93,19 @@ function onKeyPress(code) {
 }
 
 function onCanvasClick(mx, my) {
-  if (screen === 'title') { screen = 'charSelect'; SFX.confirm(); return; }
+  if (screen === 'title') {
+    // Click on menu buttons
+    [0, 1].forEach(idx => {
+      const by = H/2 + 30 + idx * 56;
+      if (Math.abs(mx - W/2) < 110 && Math.abs(my - by) < 22) {
+        titleMenuIdx = idx;
+        SFX.confirm();
+        if (idx === 0) screen = 'charSelect';
+        else { settingsFrom = 'title'; settingsMenuIdx = 0; screen = 'settings'; }
+      }
+    });
+    return;
+  }
   if (screen === 'charSelect') {
     CHAR_KEYS.forEach((key, idx) => {
       const cx = W/2 - 200 + idx * 200;
@@ -72,6 +115,34 @@ function onCanvasClick(mx, my) {
         SFX.confirm();
       }
     });
+  } else if (screen === 'paused') {
+    [0, 1, 2].forEach(idx => {
+      const by = H/2 - 20 + idx * 54;
+      if (Math.abs(mx - W/2) < 115 && Math.abs(my - by) < 22) {
+        pauseMenuIdx = idx; confirmPause();
+      }
+    });
+  } else if (screen === 'settings') {
+    // Volume row clicks (left/right arrows)
+    const vol0y = 190;
+    if (Math.abs(my - vol0y) < 30) {
+      settingsMenuIdx = 0;
+      const bx = W/2-20, barW = 140;
+      if (mx >= bx && mx <= bx+barW) {
+        SETTINGS.volume = Math.max(0, Math.min(1, (mx-bx)/barW));
+      } else if (mx < bx) {
+        SETTINGS.volume = Math.max(0, SETTINGS.volume - 0.05);
+      } else {
+        SETTINGS.volume = Math.min(1, SETTINGS.volume + 0.05);
+      }
+    }
+    // SFX toggle
+    if (Math.abs(my - (190+72)) < 30 && mx > W/2+30 && mx < W/2+140) {
+      SETTINGS.sfx = !SETTINGS.sfx; SFX.select();
+    }
+    // Back button
+    const backY = 190 + 3 * 72;
+    if (Math.abs(mx - W/2) < 110 && Math.abs(my - backY) < 22) closeSettings();
   } else if (screen === 'gameOver') {
     const bx = W/2, by0 = H/2 + 70, by1 = H/2 + 122;
     if (Math.abs(mx - bx) < 100 && Math.abs(my - by0) < 20) { gameOverMenuIdx = 0; confirmGameOver(); }
@@ -85,6 +156,18 @@ function confirmGameOver() {
   else screen = 'title';
 }
 
+function confirmPause() {
+  SFX.confirm();
+  if (pauseMenuIdx === 0) { screen = 'game'; }
+  else if (pauseMenuIdx === 1) { screen = 'title'; gs = null; }
+  else if (pauseMenuIdx === 2) { settingsFrom = 'paused'; settingsMenuIdx = 0; screen = 'settings'; }
+}
+
+function closeSettings() {
+  SFX.confirm();
+  screen = settingsFrom === 'paused' ? 'paused' : 'title';
+}
+
 // ==================== GAME FLOW ====================
 function startGame(charKey) {
   gs = initGS(charKey);
@@ -96,9 +179,10 @@ function activateSkill() {
   const p = gs.player;
   if (p.skillCharge < 100 || p.skillActive > 0 || p.bannerTimer > 0) return;
   p.skillCharge = 0;
-  p.bannerTimer = 30;           // 0.5s banner
-  p.invincible = 630;           // safe during banner + skill
+  p.bannerTimer = 180;          // 3s: 0.5s slide-in + 1.5s hold + 1s slide-out
+  p.invincible = 780;           // safe during banner (180f) + skill (600f)
   SFX.skillUse();
+  SFX.skillAudio(gs.charKey);
 }
 
 function onBannerEnd() {
@@ -264,6 +348,7 @@ function update() {
   }
 
   // Bullets
+  if (p.bannerTimer > 0) return;   // world frozen during skill banner
   gs.bullets = gs.bullets.filter(b => {
     // Homing
     if (b.tracking && gs.enemies.length > 0) {
@@ -459,6 +544,8 @@ function loop() {
   if      (screen === 'title')      drawTitle();
   else if (screen === 'charSelect') drawCharSelect();
   else if (screen === 'game')       drawGame();
+  else if (screen === 'paused')     { if(gs) drawGame(); drawPause(); }
+  else if (screen === 'settings')   drawSettings();
   else if (screen === 'gameOver')   { if(gs) drawGame(); drawGameOver(); }
   requestAnimationFrame(loop);
 }

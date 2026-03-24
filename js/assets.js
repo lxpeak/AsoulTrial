@@ -5,14 +5,31 @@ const W = canvas.width, H = canvas.height;
 
 // ==================== IMAGES ====================
 const IMGS = {};
-[['jiaran',   'assets/character/diana-1.jpg'],
- ['bella',    'assets/character/bella-1.jpg'],
- ['eileen',   'assets/character/eileen-1.jpg'],
- ['enemy',    'assets/character/enemy-1.jpg'],
- ['b_jiaran', 'assets/THEWORLD/jiaran-1.jpg'],
- ['b_bella',  'assets/THEWORLD/beila-1.jpg'],
- ['b_eileen', 'assets/THEWORLD/nailin-1.jpg'],
+[['jiaran',     'assets/character/diana-1.jpg'],
+ ['bella',      'assets/character/bella-1.jpg'],
+ ['eileen',     'assets/character/eileen-1.jpg'],
+ ['enemy',      'assets/character/enemy-1.jpg'],
+ ['b_jiaran',   'assets/THEWORLD/jiaran-1.jpg'],
+ ['b_bella',    'assets/THEWORLD/beila-1.jpg'],
+ ['b_eileen',   'assets/THEWORLD/nailin-1.jpg'],
+ ['background', 'assets/background/background-1.png'],
 ].forEach(([k, src]) => { IMGS[k] = new Image(); IMGS[k].src = src; });
+
+// ==================== SETTINGS ====================
+const SETTINGS = { volume: 0.7, sfx: true };
+
+// ==================== SKILL AUDIO ====================
+const SKILL_AUDIO = {
+  jiaran: 'assets/audio/diana-skill-1.mp3',
+  bella:  'assets/audio/bella-skill-1.mp3',
+  eileen: 'assets/audio/eileen-skill-1.mp3',
+};
+// Preload Audio elements
+const AUDIOS = {};
+Object.entries(SKILL_AUDIO).forEach(([k, src]) => {
+  AUDIOS[k] = new Audio(src);
+  AUDIOS[k].preload = 'auto';
+});
 
 // ==================== CHARACTERS ====================
 const CHARS = {
@@ -32,6 +49,8 @@ function getAC() {
   return audioCtx;
 }
 function playTone({ type='square', freq=440, freqEnd=null, dur=0.1, vol=0.3, atk=0.005 }={}) {
+  if (!SETTINGS.sfx) return;
+  vol *= SETTINGS.volume;
   try {
     const ac = getAC();
     const osc = ac.createOscillator(), g = ac.createGain();
@@ -47,6 +66,8 @@ function playTone({ type='square', freq=440, freqEnd=null, dur=0.1, vol=0.3, atk
   } catch(e) {}
 }
 function playNoise({ dur=0.15, vol=0.25 }={}) {
+  if (!SETTINGS.sfx) return;
+  vol *= SETTINGS.volume;
   try {
     const ac = getAC();
     const buf = ac.createBuffer(1, ac.sampleRate * dur, ac.sampleRate);
@@ -75,4 +96,11 @@ const SFX = {
   gameOver:   () => [440,330,220,110].forEach((f,i) => setTimeout(() => playTone({ type:'sawtooth', freq:f, dur:0.3, vol:0.28 }), i*140)),
   select:     () => playTone({ type:'sine', freq:660, dur:0.07, vol:0.15 }),
   confirm:    () => [523,659].forEach((f,i) => setTimeout(() => playTone({ type:'sine', freq:f, dur:0.1, vol:0.2 }), i*80)),
+  skillAudio: (charKey) => {
+    const a = AUDIOS[charKey];
+    if (!a) return;
+    a.volume = Math.max(0, Math.min(1, SETTINGS.volume));
+    a.currentTime = 0;
+    a.play().catch(() => {});
+  },
 };
